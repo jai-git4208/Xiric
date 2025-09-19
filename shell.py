@@ -1,7 +1,10 @@
 import xiric
 
+RED = "\033[31m"
+RESET = "\033[0m"
+
 while True:
-	text = input('Xiric >>> ')
+	text = input(f"Xiric {RED}>>>{RESET} ")
 	if text.strip() == "": continue
 	result, error = xiric.run('<stdin>', text)
 
