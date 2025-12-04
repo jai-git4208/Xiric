@@ -1,0 +1,22 @@
+print("Testing Compound Assignment Operators...")
+set x = 10
+print("Initial x = 10")
+x += 5
+print("After x += 5: " + to_str(x))
+x -= 3
+print("After x -= 3: " + to_str(x))
+x *= 2
+print("After x *= 2: " + to_str(x))
+x /= 4
+print("After x /= 4: " + to_str(x))
+set y = 17
+print("Initial y = 17")
+y %= 5
+print("After y %= 5: " + to_str(y))
+print("Counter example:")
+set counter = 0
+for i = 0 to 10 do
+    counter += 1
+end
+print("Counter after loop: " + to_str(counter))
+print("All compound assignment tests passed!")

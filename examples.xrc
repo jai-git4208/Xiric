@@ -1,0 +1,73 @@
+define fibonacci(n) -> do
+    if n <= 1 do
+        return n
+    end
+    return fibonacci(n - 1) + fibonacci(n - 2)
+end
+print("Fibonacci sequence (first 10 numbers):")
+for i = 0 to 10 do
+    print(fibonacci(i))
+end
+define is_prime(n) -> do
+    if n <= 1 do
+        return false
+    end
+    for i = 2 to n do
+        if i * i > n do
+            break
+        end
+        if n / i == floor(n / i) do
+            return false
+        end
+    end
+    return true
+end
+print("Prime numbers from 1 to 30:")
+for num = 1 to 31 do
+    if is_prime(num) do
+        print(num)
+    end
+end
+print("Math operations:")
+set numbers = [5, 12, 3, 18, 7, 25, 2]
+print("Numbers: ")
+print(numbers)
+print("Min: " + to_str(min(numbers)))
+print("Max: " + to_str(max(numbers)))
+print("String manipulation:")
+set sentence = "the quick brown fox"
+set words = split(sentence, " ")
+set capitalized = []
+for i = 0 to len(words) do
+    set word = words[i]
+    append(capitalized, upper(word))
+end
+set result = join(capitalized, " ")
+print("Original: " + sentence)
+print("Capitalized: " + result)
+print("Temperature converter:")
+define celsius_to_fahrenheit(c) -> (c * 9 / 5) + 32
+define fahrenheit_to_celsius(f) -> (f - 32) * 5 / 9
+set temp_c = 25
+set temp_f = celsius_to_fahrenheit(temp_c)
+print(to_str(temp_c) + "C = " + to_str(temp_f) + "F")
+set temp_f2 = 77
+set temp_c2 = fahrenheit_to_celsius(temp_f2)
+print(to_str(temp_f2) + "F = " + to_str(temp_c2) + "C")
+print("Generating a list of squares:")
+set squares = []
+set nums = range(1, 11)
+for i = 0 to len(nums) do
+    set n = nums[i]
+    append(squares, n * n)
+end
+print(squares)
+print("Computing factorial:")
+define factorial(n) -> do
+    if n <= 1 do
+        return 1
+    end
+    return n * factorial(n - 1)
+end
+print("5! = " + to_str(factorial(5)))
+print("10! = " + to_str(factorial(10)))

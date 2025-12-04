@@ -1,0 +1,24 @@
+print("Testing Modulo operator:")
+print(10 % 3)
+print(17 % 5)
+print(100 % 7)
+print("Testing Floor Division operator:")
+print(10 // 3)
+print(17 // 5)
+print(100 // 7)
+print("Practical examples:")
+set items = 47
+set per_page = 10
+set pages = items // per_page
+set remaining = items % per_page
+print("Total pages: " + to_str(pages))
+print("Remaining items: " + to_str(remaining))
+set num = 42
+if num % 2 == 0 do
+    print("42 is even")
+end
+set num2 = 17
+if num2 % 2 == 1 do
+    print("17 is odd")
+end
+print("All tests passed!")

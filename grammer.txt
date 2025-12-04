@@ -1,6 +1,97 @@
-expr    : term ((PLUS|MINUS) term)*
+# Grammar for Xiric Programming Language
 
-term    : factor ((MUL|DIV) factor)*
+# Program Structure
+program     : statements
 
-factor  : INT|FLOAT
-			
+statements  : NEWLINE* statement (NEWLINE+ statement)* NEWLINE*
+
+statement   : KEYWORD:return expr?
+            : KEYWORD:continue
+            : KEYWORD:break
+            : expr
+
+# Expressions
+expr        : KEYWORD:set IDENTIFIER EQ expr
+            : comp-expr ((KEYWORD:and|KEYWORD:or) comp-expr)*
+
+comp-expr   : KEYWORD:not comp-expr
+            : arith-expr ((EE|NE|LT|GT|LTE|GTE) arith-expr)*
+
+arith-expr  : term ((PLUS|MINUS) term)*
+
+term        : factor ((MUL|DIV) factor)*
+
+factor      : (PLUS|MINUS) factor
+            : power
+
+power       : call (POW factor)*
+
+call        : atom (LPAREN (expr (COMMA expr)*)? RPAREN)?
+
+atom        : INT|FLOAT|STRING|IDENTIFIER
+            : LPAREN expr RPAREN
+            : list-expr
+            : if-expr
+            : for-expr
+            : while-expr
+            : func-def
+
+# List Expression
+list-expr   : LSQUARE (expr (COMMA expr)*)? RSQUARE
+
+# Control Flow
+if-expr     : KEYWORD:if expr KEYWORD:do
+                statements
+              (KEYWORD:elif expr KEYWORD:do
+                statements)*
+              (KEYWORD:else KEYWORD:do
+                statements)?
+              KEYWORD:end
+
+for-expr    : KEYWORD:for IDENTIFIER EQ expr KEYWORD:to expr 
+              (KEYWORD:by expr)? KEYWORD:do
+                statements
+              KEYWORD:end
+
+while-expr  : KEYWORD:while expr KEYWORD:do
+                statements
+              KEYWORD:end
+
+# Function Definition
+func-def    : KEYWORD:define IDENTIFIER?
+              LPAREN (IDENTIFIER (COMMA IDENTIFIER)*)? RPAREN
+              (ARROW expr | KEYWORD:do statements KEYWORD:end)
+
+# Tokens
+INT         : [0-9]+
+FLOAT       : [0-9]+\.[0-9]+
+STRING      : "([^"\\]|\\.)*"
+IDENTIFIER  : [a-zA-Z_][a-zA-Z0-9_]*
+KEYWORD     : set|and|or|not|if|elif|else|for|to|by|while|define|do|end|return|continue|break
+
+# Operators
+PLUS        : +
+MINUS       : -
+MUL         : *
+DIV         : /
+POW         : ^
+EQ          : =
+EE          : ==
+NE          : !=
+LT          : <
+GT          : >
+LTE         : <=
+GTE         : >=
+
+# Delimiters
+LPAREN      : (
+RPAREN      : )
+LSQUARE     : [
+RSQUARE     : ]
+COMMA       : ,
+ARROW       : ->
+NEWLINE     : ; | \n
+EOF         : end-of-file
+
+# Comments
+COMMENT     : # (any text until newline)

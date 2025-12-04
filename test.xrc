@@ -1,0 +1,31 @@
+print("Testing math functions...")
+set num = -42
+print(abs(num))
+set pi = 3.14159
+print(floor(pi))
+print(ceil(pi))
+print(sqrt(16))
+set numbers = [5, 2, 8, 1, 9]
+print(min(numbers))
+print(max(numbers))
+print("Testing string functions...")
+set text = "Hello World"
+print(upper(text))
+print(lower(text))
+set replaced = replace(text, "World", "Xiric")
+print(replaced)
+set words = split(text, " ")
+print(words)
+set joined = join(words, "-")
+print(joined)
+print("Testing type conversion...")
+set str_num = "123"
+set num = to_int(str_num)
+print(num + 77)
+set float_str = "3.14"
+set float_val = to_float(float_str)
+print(float_val * 2)
+print("Testing range...")
+set range_list = range(1, 6)
+print(range_list)
+print("All tests passed!")

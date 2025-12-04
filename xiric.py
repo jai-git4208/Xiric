@@ -106,12 +106,22 @@ TT_PLUS     	= 'PLUS'
 TT_MINUS    	= 'MINUS'
 TT_MUL      	= 'MUL'
 TT_DIV      	= 'DIV'
+TT_MOD				= 'MOD'
+TT_FLOORDIV		= 'FLOORDIV'
 TT_POW				= 'POW'
 TT_EQ					= 'EQ'
+TT_PLUSEQ			= 'PLUSEQ'
+TT_MINUSEQ		= 'MINUSEQ'
+TT_MULEQ			= 'MULEQ'
+TT_DIVEQ			= 'DIVEQ'
+TT_MODEQ			= 'MODEQ'
 TT_LPAREN   	= 'LPAREN'
 TT_RPAREN   	= 'RPAREN'
 TT_LSQUARE    = 'LSQUARE'
 TT_RSQUARE    = 'RSQUARE'
+TT_LBRACE			= 'LBRACE'
+TT_RBRACE			= 'RBRACE'
+TT_COLON			= 'COLON'
 TT_EE					= 'EE'
 TT_NE					= 'NE'
 TT_LT					= 'LT'
@@ -198,16 +208,15 @@ class Lexer:
       elif self.current_char == '"':
         tokens.append(self.make_string())
       elif self.current_char == '+':
-        tokens.append(Token(TT_PLUS, pos_start=self.pos))
-        self.advance()
+        tokens.append(self.make_plus())
       elif self.current_char == '-':
         tokens.append(self.make_minus_or_arrow())
       elif self.current_char == '*':
-        tokens.append(Token(TT_MUL, pos_start=self.pos))
-        self.advance()
+        tokens.append(self.make_multiply())
       elif self.current_char == '/':
-        tokens.append(Token(TT_DIV, pos_start=self.pos))
-        self.advance()
+        tokens.append(self.make_divide())
+      elif self.current_char == '%':
+        tokens.append(self.make_modulo())
       elif self.current_char == '^':
         tokens.append(Token(TT_POW, pos_start=self.pos))
         self.advance()
@@ -235,6 +244,15 @@ class Lexer:
         tokens.append(self.make_greater_than())
       elif self.current_char == ',':
         tokens.append(Token(TT_COMMA, pos_start=self.pos))
+        self.advance()
+      elif self.current_char == '{':
+        tokens.append(Token(TT_LBRACE, pos_start=self.pos))
+        self.advance()
+      elif self.current_char == '}':
+        tokens.append(Token(TT_RBRACE, pos_start=self.pos))
+        self.advance()
+      elif self.current_char == ':':
+        tokens.append(Token(TT_COLON, pos_start=self.pos))
         self.advance()
       else:
         pos_start = self.pos.copy()
@@ -306,6 +324,56 @@ class Lexer:
     if self.current_char == '>':
       self.advance()
       tok_type = TT_ARROW
+    elif self.current_char == '=':
+      self.advance()
+      tok_type = TT_MINUSEQ
+
+    return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+  def make_plus(self):
+    tok_type = TT_PLUS
+    pos_start = self.pos.copy()
+    self.advance()
+
+    if self.current_char == '=':
+      self.advance()
+      tok_type = TT_PLUSEQ
+
+    return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+  def make_multiply(self):
+    tok_type = TT_MUL
+    pos_start = self.pos.copy()
+    self.advance()
+
+    if self.current_char == '=':
+      self.advance()
+      tok_type = TT_MULEQ
+
+    return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+  def make_divide(self):
+    tok_type = TT_DIV
+    pos_start = self.pos.copy()
+    self.advance()
+
+    if self.current_char == '/':
+      self.advance()
+      tok_type = TT_FLOORDIV
+    elif self.current_char == '=':
+      self.advance()
+      tok_type = TT_DIVEQ
+
+    return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
+
+  def make_modulo(self):
+    tok_type = TT_MOD
+    pos_start = self.pos.copy()
+    self.advance()
+
+    if self.current_char == '=':
+      self.advance()
+      tok_type = TT_MODEQ
 
     return Token(tok_type, pos_start=pos_start, pos_end=self.pos)
 
@@ -402,6 +470,15 @@ class VarAccessNode:
 class VarAssignNode:
   def __init__(self, var_name_tok, value_node):
     self.var_name_tok = var_name_tok
+    self.value_node = value_node
+
+    self.pos_start = self.var_name_tok.pos_start
+    self.pos_end = self.value_node.pos_end
+
+class CompoundAssignNode:
+  def __init__(self, var_name_tok, op_tok, value_node):
+    self.var_name_tok = var_name_tok
+    self.op_tok = op_tok
     self.value_node = value_node
 
     self.pos_start = self.var_name_tok.pos_start
@@ -682,6 +759,17 @@ class Parser:
         "Expected 'set', 'if', 'for', 'while', 'define', int, float, identifier, '+', '-', '(', '[' or 'not'"
       ))
 
+    # Check for compound assignment
+    if isinstance(node, VarAccessNode) and self.current_tok.type in (TT_PLUSEQ, TT_MINUSEQ, TT_MULEQ, TT_DIVEQ, TT_MODEQ):
+      var_name_tok = node.var_name_tok
+      op_tok = self.current_tok
+      res.register_advancement()
+      self.advance()
+      
+      value_node = res.register(self.expr())
+      if res.error: return res
+      return res.success(CompoundAssignNode(var_name_tok, op_tok, value_node))
+
     return res.success(node)
 
   def comp_expr(self):
@@ -710,7 +798,7 @@ class Parser:
     return self.bin_op(self.term, (TT_PLUS, TT_MINUS))
 
   def term(self):
-    return self.bin_op(self.factor, (TT_MUL, TT_DIV))
+    return self.bin_op(self.factor, (TT_MUL, TT_DIV, TT_MOD, TT_FLOORDIV))
 
   def factor(self):
     res = ParseResult()
@@ -1419,6 +1507,32 @@ class Number(Value):
     else:
       return None, Value.illegal_operation(self, other)
 
+  def modulo_by(self, other):
+    if isinstance(other, Number):
+      if other.value == 0:
+        return None, RTError(
+          other.pos_start, other.pos_end,
+          'Modulo by zero',
+          self.context
+        )
+
+      return Number(self.value % other.value).set_context(self.context), None
+    else:
+      return None, Value.illegal_operation(self, other)
+
+  def floordived_by(self, other):
+    if isinstance(other, Number):
+      if other.value == 0:
+        return None, RTError(
+          other.pos_start, other.pos_end,
+          'Division by zero',
+          self.context
+        )
+
+      return Number(self.value // other.value).set_context(self.context), None
+    else:
+      return None, Value.illegal_operation(self, other)
+
   def powed_by(self, other):
     if isinstance(other, Number):
       return Number(self.value ** other.value).set_context(self.context), None
@@ -1855,6 +1969,364 @@ class BuiltInFunction(BaseFunction):
     return RTResult().success(Number.null)
   execute_run.arg_names = ["fn"]
 
+  # Math functions
+  def execute_sqrt(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    if value.value < 0:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Cannot calculate square root of negative number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(math.sqrt(value.value)))
+  execute_sqrt.arg_names = ["value"]
+
+  def execute_abs(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(abs(value.value)))
+  execute_abs.arg_names = ["value"]
+
+  def execute_floor(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(math.floor(value.value)))
+  execute_floor.arg_names = ["value"]
+
+  def execute_ceil(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(math.ceil(value.value)))
+  execute_ceil.arg_names = ["value"]
+
+  def execute_round(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(round(value.value)))
+  execute_round.arg_names = ["value"]
+
+  def execute_sin(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(math.sin(value.value)))
+  execute_sin.arg_names = ["value"]
+
+  def execute_cos(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(math.cos(value.value)))
+  execute_cos.arg_names = ["value"]
+
+  def execute_tan(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    if not isinstance(value, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number",
+        exec_ctx
+      ))
+    return RTResult().success(Number(math.tan(value.value)))
+  execute_tan.arg_names = ["value"]
+
+  def execute_min(self, exec_ctx):
+    list_ = exec_ctx.symbol_table.get("list")
+    if not isinstance(list_, List):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a list",
+        exec_ctx
+      ))
+    if len(list_.elements) == 0:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Cannot find minimum of empty list",
+        exec_ctx
+      ))
+    min_val = min([e.value for e in list_.elements if isinstance(e, Number)])
+    return RTResult().success(Number(min_val))
+  execute_min.arg_names = ["list"]
+
+  def execute_max(self, exec_ctx):
+    list_ = exec_ctx.symbol_table.get("list")
+    if not isinstance(list_, List):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a list",
+        exec_ctx
+      ))
+    if len(list_.elements) == 0:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Cannot find maximum of empty list",
+        exec_ctx
+      ))
+    max_val = max([e.value for e in list_.elements if isinstance(e, Number)])
+    return RTResult().success(Number(max_val))
+  execute_max.arg_names = ["list"]
+
+  # String functions
+  def execute_upper(self, exec_ctx):
+    string = exec_ctx.symbol_table.get("string")
+    if not isinstance(string, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a string",
+        exec_ctx
+      ))
+    return RTResult().success(String(string.value.upper()))
+  execute_upper.arg_names = ["string"]
+
+  def execute_lower(self, exec_ctx):
+    string = exec_ctx.symbol_table.get("string")
+    if not isinstance(string, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a string",
+        exec_ctx
+      ))
+    return RTResult().success(String(string.value.lower()))
+  execute_lower.arg_names = ["string"]
+
+  def execute_split(self, exec_ctx):
+    string = exec_ctx.symbol_table.get("string")
+    delimiter = exec_ctx.symbol_table.get("delimiter")
+    
+    if not isinstance(string, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "First argument must be a string",
+        exec_ctx
+      ))
+    
+    if not isinstance(delimiter, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Second argument must be a string",
+        exec_ctx
+      ))
+    
+    parts = string.value.split(delimiter.value)
+    list_elements = [String(part) for part in parts]
+    return RTResult().success(List(list_elements))
+  execute_split.arg_names = ["string", "delimiter"]
+
+  def execute_join(self, exec_ctx):
+    list_ = exec_ctx.symbol_table.get("list")
+    delimiter = exec_ctx.symbol_table.get("delimiter")
+    
+    if not isinstance(list_, List):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "First argument must be a list",
+        exec_ctx
+      ))
+    
+    if not isinstance(delimiter, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Second argument must be a string",
+        exec_ctx
+      ))
+    
+    string_parts = [str(elem) for elem in list_.elements]
+    result = delimiter.value.join(string_parts)
+    return RTResult().success(String(result))
+  execute_join.arg_names = ["list", "delimiter"]
+
+  def execute_replace(self, exec_ctx):
+    string = exec_ctx.symbol_table.get("string")
+    old = exec_ctx.symbol_table.get("old")
+    new = exec_ctx.symbol_table.get("new")
+    
+    if not isinstance(string, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "First argument must be a string",
+        exec_ctx
+      ))
+    
+    if not isinstance(old, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Second argument must be a string",
+        exec_ctx
+      ))
+    
+    if not isinstance(new, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Third argument must be a string",
+        exec_ctx
+      ))
+    
+    result = string.value.replace(old.value, new.value)
+    return RTResult().success(String(result))
+  execute_replace.arg_names = ["string", "old", "new"]
+
+  # Type conversion functions
+  def execute_to_int(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    
+    if isinstance(value, Number):
+      return RTResult().success(Number(int(value.value)))
+    elif isinstance(value, String):
+      try:
+        num = int(value.value)
+        return RTResult().success(Number(num))
+      except ValueError:
+        return RTResult().failure(RTError(
+          self.pos_start, self.pos_end,
+          f"Cannot convert '{value.value}' to integer",
+          exec_ctx
+        ))
+    else:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number or string",
+        exec_ctx
+      ))
+  execute_to_int.arg_names = ["value"]
+
+  def execute_to_float(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    
+    if isinstance(value, Number):
+      return RTResult().success(Number(float(value.value)))
+    elif isinstance(value, String):
+      try:
+        num = float(value.value)
+        return RTResult().success(Number(num))
+      except ValueError:
+        return RTResult().failure(RTError(
+          self.pos_start, self.pos_end,
+          f"Cannot convert '{value.value}' to float",
+          exec_ctx
+        ))
+    else:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a number or string",
+        exec_ctx
+      ))
+  execute_to_float.arg_names = ["value"]
+
+  def execute_to_str(self, exec_ctx):
+    value = exec_ctx.symbol_table.get("value")
+    return RTResult().success(String(str(value)))
+  execute_to_str.arg_names = ["value"]
+
+  # Utility functions
+  def execute_range(self, exec_ctx):
+    start = exec_ctx.symbol_table.get("start")
+    end = exec_ctx.symbol_table.get("end")
+    
+    if not isinstance(start, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "First argument must be a number",
+        exec_ctx
+      ))
+    
+    if not isinstance(end, Number):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Second argument must be a number",
+        exec_ctx
+      ))
+    
+    elements = [Number(i) for i in range(int(start.value), int(end.value))]
+    return RTResult().success(List(elements))
+  execute_range.arg_names = ["start", "end"]
+
+  # File I/O functions
+  def execute_read_file(self, exec_ctx):
+    filename = exec_ctx.symbol_table.get("filename")
+    
+    if not isinstance(filename, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Argument must be a string",
+        exec_ctx
+      ))
+    
+    try:
+      with open(filename.value, 'r') as f:
+        content = f.read()
+      return RTResult().success(String(content))
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"Failed to read file: {str(e)}",
+        exec_ctx
+      ))
+  execute_read_file.arg_names = ["filename"]
+
+  def execute_write_file(self, exec_ctx):
+    filename = exec_ctx.symbol_table.get("filename")
+    content = exec_ctx.symbol_table.get("content")
+    
+    if not isinstance(filename, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "First argument must be a string",
+        exec_ctx
+      ))
+    
+    if not isinstance(content, String):
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        "Second argument must be a string",
+        exec_ctx
+      ))
+    
+    try:
+      with open(filename.value, 'w') as f:
+        f.write(content.value)
+      return RTResult().success(Number.null)
+    except Exception as e:
+      return RTResult().failure(RTError(
+        self.pos_start, self.pos_end,
+        f"Failed to write file: {str(e)}",
+        exec_ctx
+      ))
+  execute_write_file.arg_names = ["filename", "content"]
+
 BuiltInFunction.print       = BuiltInFunction("print")
 BuiltInFunction.show   = BuiltInFunction("show")
 BuiltInFunction.input       = BuiltInFunction("input")
@@ -1870,6 +2342,37 @@ BuiltInFunction.extend      = BuiltInFunction("extend")
 BuiltInFunction.len					= BuiltInFunction("len")
 BuiltInFunction.run					= BuiltInFunction("run")
 
+# Math functions
+BuiltInFunction.sqrt        = BuiltInFunction("sqrt")
+BuiltInFunction.abs         = BuiltInFunction("abs")
+BuiltInFunction.floor       = BuiltInFunction("floor")
+BuiltInFunction.ceil        = BuiltInFunction("ceil")
+BuiltInFunction.round       = BuiltInFunction("round")
+BuiltInFunction.sin         = BuiltInFunction("sin")
+BuiltInFunction.cos         = BuiltInFunction("cos")
+BuiltInFunction.tan         = BuiltInFunction("tan")
+BuiltInFunction.min         = BuiltInFunction("min")
+BuiltInFunction.max         = BuiltInFunction("max")
+
+# String functions
+BuiltInFunction.upper       = BuiltInFunction("upper")
+BuiltInFunction.lower       = BuiltInFunction("lower")
+BuiltInFunction.split       = BuiltInFunction("split")
+BuiltInFunction.join        = BuiltInFunction("join")
+BuiltInFunction.replace     = BuiltInFunction("replace")
+
+# Type conversion functions
+BuiltInFunction.to_int      = BuiltInFunction("to_int")
+BuiltInFunction.to_float    = BuiltInFunction("to_float")
+BuiltInFunction.to_str      = BuiltInFunction("to_str")
+
+# Utility functions
+BuiltInFunction.range       = BuiltInFunction("range")
+
+# File I/O functions
+BuiltInFunction.read_file   = BuiltInFunction("read_file")
+BuiltInFunction.write_file  = BuiltInFunction("write_file")
+
 #######################################
 # CONTEXT
 #######################################
@@ -1880,6 +2383,31 @@ class Context:
     self.parent = parent
     self.parent_entry_pos = parent_entry_pos
     self.symbol_table = None
+
+#######################################
+# SYMBOL TABLE
+#######################################
+
+class SymbolTable:
+  def __init__(self, parent=None):
+    self.symbols = {}
+    self.parent = parent
+
+  def get(self, name):
+    value = self.symbols.get(name, None)
+    if value == None and self.parent:
+      return self.parent.get(name)
+    return value
+
+  def set(self, name, value):
+    self.symbols[name] = value
+
+  def remove(self, name):
+    del self.symbols[name]
+
+#######################################
+# INTERPRETER
+#######################################
 
 #######################################
 # SYMBOL TABLE
@@ -1963,6 +2491,54 @@ class Interpreter:
     context.symbol_table.set(var_name, value)
     return res.success(value)
 
+  def visit_CompoundAssignNode(self, node, context):
+    res = RTResult()
+    var_name = node.var_name_tok.value
+    
+    # Get current value of variable
+    current_value = context.symbol_table.get(var_name)
+    if not current_value:
+      return res.failure(RTError(
+        node.pos_start, node.pos_end,
+        f"'{var_name}' is not defined",
+        context
+      ))
+    
+    # Evaluate the right-hand side
+    rhs_value = res.register(self.visit(node.value_node, context))
+    if res.should_return(): return res
+    
+    # Map compound operators to binary operators
+    op_map = {
+      TT_PLUSEQ: TT_PLUS,
+      TT_MINUSEQ: TT_MINUS,
+      TT_MULEQ: TT_MUL,
+      TT_DIVEQ: TT_DIV,
+      TT_MODEQ: TT_MOD
+    }
+    
+    # Get the corresponding binary operation
+    bin_op_type = op_map.get(node.op_tok.type)
+    
+    # Perform the operation
+    if bin_op_type == TT_PLUS:
+      new_value, error = current_value.added_to(rhs_value)
+    elif bin_op_type == TT_MINUS:
+      new_value, error = current_value.subbed_by(rhs_value)
+    elif bin_op_type == TT_MUL:
+      new_value, error = current_value.multed_by(rhs_value)
+    elif bin_op_type == TT_DIV:
+      new_value, error = current_value.dived_by(rhs_value)
+    elif bin_op_type == TT_MOD:
+      new_value, error = current_value.modulo_by(rhs_value)
+    
+    if error:
+      return res.failure(error)
+    
+    # Set the new value
+    context.symbol_table.set(var_name, new_value)
+    return res.success(new_value)
+
   def visit_BinOpNode(self, node, context):
     res = RTResult()
     left = res.register(self.visit(node.left_node, context))
@@ -1978,6 +2554,10 @@ class Interpreter:
       result, error = left.multed_by(right)
     elif node.op_tok.type == TT_DIV:
       result, error = left.dived_by(right)
+    elif node.op_tok.type == TT_MOD:
+      result, error = left.modulo_by(right)
+    elif node.op_tok.type == TT_FLOORDIV:
+      result, error = left.floordived_by(right)
     elif node.op_tok.type == TT_POW:
       result, error = left.powed_by(right)
     elif node.op_tok.type == TT_EE:
@@ -2184,6 +2764,38 @@ global_symbol_table.set("extend", BuiltInFunction.extend)
 global_symbol_table.set("len", BuiltInFunction.len)
 
 global_symbol_table.set("run", BuiltInFunction.run)
+
+# Math functions
+global_symbol_table.set("sqrt", BuiltInFunction.sqrt)
+global_symbol_table.set("abs", BuiltInFunction.abs)
+global_symbol_table.set("floor", BuiltInFunction.floor)
+global_symbol_table.set("ceil", BuiltInFunction.ceil)
+global_symbol_table.set("round", BuiltInFunction.round)
+global_symbol_table.set("sin", BuiltInFunction.sin)
+global_symbol_table.set("cos", BuiltInFunction.cos)
+global_symbol_table.set("tan", BuiltInFunction.tan)
+global_symbol_table.set("min", BuiltInFunction.min)
+global_symbol_table.set("max", BuiltInFunction.max)
+
+# String functions
+global_symbol_table.set("upper", BuiltInFunction.upper)
+global_symbol_table.set("lower", BuiltInFunction.lower)
+global_symbol_table.set("split", BuiltInFunction.split)
+global_symbol_table.set("join", BuiltInFunction.join)
+global_symbol_table.set("replace", BuiltInFunction.replace)
+
+# Type conversion functions
+global_symbol_table.set("to_int", BuiltInFunction.to_int)
+global_symbol_table.set("to_float", BuiltInFunction.to_float)
+global_symbol_table.set("to_str", BuiltInFunction.to_str)
+
+# Utility functions
+global_symbol_table.set("range", BuiltInFunction.range)
+
+# File I/O functions
+global_symbol_table.set("read_file", BuiltInFunction.read_file)
+global_symbol_table.set("write_file", BuiltInFunction.write_file)
+
 
 
 def run(fn, text):
